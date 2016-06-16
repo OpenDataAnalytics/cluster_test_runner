@@ -1,0 +1,9 @@
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Run an async task that represents a test case
+      command: >-
+        sleep {{ test_run_option }}
+      args:
+        async: 45
+        poll: 0
