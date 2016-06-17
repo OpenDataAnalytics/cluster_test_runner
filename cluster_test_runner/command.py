@@ -53,7 +53,7 @@ def parse_binder(input_binder_path):
 
         return binder_list[0]
 
-    except IOError as e:
+    except IOError:
         logger.error("Could not read %s" % input_binder_path)
         sys.exit(1)
     except yaml.scanner.ScannerError:
@@ -88,6 +88,7 @@ def main():
     init_logger(getattr(logging, args.loglevel))
 
     binder = parse_binder(args.input_binder)
+    import pudb; pu.db
 
 
 if __name__ == "__main__":

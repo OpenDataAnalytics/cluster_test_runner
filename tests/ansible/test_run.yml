@@ -1,7 +1,5 @@
 - hosts: localhost
   connection: local
-  vars:
-    ansible_python_interpreter: python2
   tasks:
     - name: Run an async task that represents a test case
       command: >-

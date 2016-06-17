@@ -1,0 +1,29 @@
+- !binder
+  vars:
+    ansible_python_interpreter: python2
+
+  playbooks:
+    - !playbook
+      path: "ansible/test.yml"
+      vars:
+        instance_type: "m4.2xlarge"
+        provision_opt: "opt1"
+
+    - !playbook
+      path: "ansible/test_run.yml"
+      vars:
+        test_run_var: "test_run_var"
+
+  paramaters:
+    - !paramater
+      name: provision_opt_2
+      values: ["12G", "20G"]
+
+    - !paramater
+      name: "num_instances"
+      values: [4, 8, 16, 64]
+      cost: 100
+
+    - !paramater
+      name: test_run_option
+      values: [5, 10, 15]
