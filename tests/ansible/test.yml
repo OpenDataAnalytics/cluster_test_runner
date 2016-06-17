@@ -2,7 +2,7 @@
   connection: local
   tasks:
     - name: A task that pretends to launch a cluster
-      debug: msg="Launch with {{ num_instaces }} instances of {{ instance_type }}"
+      debug: msg="Launch with {{ num_instances }} instances of {{ instance_type }}"
 
 
 - hosts: localhost

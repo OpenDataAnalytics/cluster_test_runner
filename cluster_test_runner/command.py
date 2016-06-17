@@ -3,8 +3,9 @@ from binder import Binder
 import yaml
 import argparse
 import logging
-import sys
 import time
+import sys
+import os
 
 DEBUG = False
 
@@ -22,10 +23,6 @@ def excepthook(exctype, value, traceback):
     sys.exit(1)
 
 sys.excepthook = excepthook
-
-def init_logger(level):
-    return logger
-
 
 def parse_binder(input_binder_path):
     try:
@@ -46,13 +43,21 @@ def parse_binder(input_binder_path):
 
 
 def run_playbooks(binder_path):
+    binder_dir = os.path.dirname(os.path.realpath(binder_path))
+
     for playbook, inventory, extra_vars in parse_binder(binder_path):
         if inventory is None:
             inventory = Inventory(['localhost'])
 
         p = Playbook(inventory, extra_vars=extra_vars)
 
+        if DEBUG:
+            p.logger.setLevel(logging.DEBUG)
+
         logger.info("Running %s" % playbook); t0 = time.time()
+
+        if not playbook.startswith("/"):
+            playbook = os.path.join(binder_dir, playbook)
 
         p.run(playbook)
 
