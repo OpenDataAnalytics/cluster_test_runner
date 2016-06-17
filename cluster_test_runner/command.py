@@ -8,7 +8,8 @@ import time
 
 DEBUG = False
 
-logger = logging.getLogger("ctr")
+logger = logging.getLogger('cluster_test_runner')
+
 
 def excepthook(exctype, value, traceback):
     global DEBUG
@@ -23,14 +24,7 @@ def excepthook(exctype, value, traceback):
 sys.excepthook = excepthook
 
 def init_logger(level):
-    logger.setLevel(level)
-
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    ch = logging.StreamHandler()
-    ch.setFormatter(formatter)
-
-    logger.addHandler(ch)
+    return logger
 
 
 def parse_binder(input_binder_path):
@@ -88,7 +82,7 @@ def main():
     if args.debug or args.loglevel == "DEBUG":
         DEBUG = True
 
-    init_logger(getattr(logging, args.loglevel))
+    logger.setLevel(getattr(logging, args.loglevel))
 
     run_playbooks(args.input_binder)
 
