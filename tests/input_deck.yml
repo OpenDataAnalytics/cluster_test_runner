@@ -1,3 +1,13 @@
-- playbooks:
-    - path: "ansible/test.yml"
-    - path: "ansible/test_run.yml"
+- !binder
+  vars:
+    global_var: "global_var"
+  playbooks:
+    - !playbook
+      path: "ansible/test.yml"
+      vars:
+        test_var: "test_var"
+
+    - !playbook
+      path: "ansible/test_run.yml"
+      vars:
+        test_run_var: "test_run_var"

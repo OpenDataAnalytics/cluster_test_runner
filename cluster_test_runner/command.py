@@ -1,5 +1,5 @@
 from dauber import Playbook, Inventory
-from deck import Deck
+from binder import Binder
 import yaml
 import argparse
 import logging
@@ -43,15 +43,21 @@ def run_playbook(args):
         p.logger.error("There was a problem with the playbook")
 
 
-def parse_deck(input_deck_path):
+def parse_binder(input_binder_path):
     try:
-        with open(input_deck_path, "rb") as fh:
-            deck_dict = yaml.load(fh.read())
+        with open(input_binder_path, "rb") as fh:
+            binder_list = yaml.load(fh.read())
+
+        if len(binder_list) > 1:
+            logger.warn("More than one binder detected. Dropping all but first binder.")
+
+        return binder_list[0]
+
     except IOError as e:
-        logger.error("Could not read %s" % input_deck_path)
+        logger.error("Could not read %s" % input_binder_path)
         sys.exit(1)
     except yaml.scanner.ScannerError:
-        logger.error("Could not parse %s" % input_deck_path)
+        logger.error("Could not parse %s" % input_binder_path)
         sys.exit(1)
 
 
@@ -72,7 +78,7 @@ def main():
         action='store_true')
 
     parser.add_argument(
-        "input_deck", help="path to a playbook to run")
+        "input_binder", help="path to a playbook to run")
 
     args = parser.parse_args()
 
@@ -81,7 +87,8 @@ def main():
 
     init_logger(getattr(logging, args.loglevel))
 
-    deck = parse_deck(args.input_deck)
+    binder = parse_binder(args.input_binder)
+
 
 if __name__ == "__main__":
     main()
