@@ -1,5 +1,7 @@
 - hosts: localhost
   connection: local
+  vars:
+    ansible_python_interpreter: python2
   tasks:
     - name: A task that pretends to launch a cluster
       debug: msg="Launch with {{ num_instaces }} instances of {{ instance_type }}"
@@ -7,6 +9,8 @@
 
 - hosts: localhost
   connection: local
+  vars:
+    ansible_python_interpreter: python2
   tasks:
     - name: A task that pretends to provision the cluster
       debug: msg="Provision cluster with {{ provision_opt }} and {{ provision_opt_2 }}"

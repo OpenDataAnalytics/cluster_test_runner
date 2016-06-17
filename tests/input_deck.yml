@@ -1,0 +1,3 @@
+- playbooks:
+    - path: "ansible/test.yml"
+    - path: "ansible/test_run.yml"

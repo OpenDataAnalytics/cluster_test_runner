@@ -61,4 +61,8 @@ setup(name='cluster_test_runner',
       entry_points= {
           'console_scripts': ['ctr=cluster_test_runner.command:main']
       },
+      install_requires=[
+          "dauber",
+          "PyYAML"
+      ],
       keywords='ansible')
