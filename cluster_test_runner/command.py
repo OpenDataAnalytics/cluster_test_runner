@@ -4,6 +4,7 @@ import yaml
 import argparse
 import logging
 import sys
+import time
 
 DEBUG = False
 
@@ -22,7 +23,6 @@ def excepthook(exctype, value, traceback):
 sys.excepthook = excepthook
 
 def init_logger(level):
-    logger = logging.getLogger("ctr")
     logger.setLevel(level)
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -33,16 +33,6 @@ def init_logger(level):
     logger.addHandler(ch)
 
 
-
-def run_playbook(args):
-    p = Playbook(Inventory(['localhost']))
-    p.logger.setLevel(getattr(logging, args.loglevel))
-
-    status = p.run(args.path)
-    if status != 0:
-        p.logger.error("There was a problem with the playbook")
-
-
 def parse_binder(input_binder_path):
     try:
         with open(input_binder_path, "rb") as fh:
@@ -51,7 +41,7 @@ def parse_binder(input_binder_path):
         if len(binder_list) > 1:
             logger.warn("More than one binder detected. Dropping all but first binder.")
 
-        return binder_list[0]
+        return binder_list[0]()
 
     except IOError:
         logger.error("Could not read %s" % input_binder_path)
@@ -60,6 +50,19 @@ def parse_binder(input_binder_path):
         logger.error("Could not parse %s" % input_binder_path)
         sys.exit(1)
 
+
+def run_playbooks(binder_path):
+    for playbook, inventory, extra_vars in parse_binder(binder_path):
+        if inventory is None:
+            inventory = Inventory(['localhost'])
+
+        p = Playbook(inventory, extra_vars=extra_vars)
+
+        logger.info("Running %s" % playbook); t0 = time.time()
+
+        p.run(playbook)
+
+        logger.info("Finished %s (%s)" % (playbook, time.time() - t0))
 
 def main():
     global DEBUG
@@ -87,9 +90,7 @@ def main():
 
     init_logger(getattr(logging, args.loglevel))
 
-    binder = parse_binder(args.input_binder)
-    import pudb; pu.db
-
+    run_playbooks(args.input_binder)
 
 if __name__ == "__main__":
     main()
