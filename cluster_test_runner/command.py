@@ -48,61 +48,43 @@ class TestRunner(object):
         # and subtract the paramater list,  then append it to the column order.
         # This makes sure the static variables are at the end of list of columns
         if show_static:
-            column_order += list(set([k for p, i, t, e in playbooks
-                                      for k in e.keys()]) - set(column_order))
+
+            column_order += list(set([k for p in playbooks
+                                      for k in p.extra_vars.keys()]) -
+                                 set(column_order))
 
         # Generate table rows. Cycle through column_order variable and get
         # extra_vars value for that key (or None). Keep in mind there may be
         # playbook specific variables so it is possible for some playbooks
         # that we will get None for the key.
         table = []
-        for tup in playbooks:
-            playbook, inventory, tags, extra_vars = tup
-            table.append([playbook, self.run_dir(*tup)] +
-                         [extra_vars.get(k, None) for k in column_order])
+        for playbook in playbooks:
+            table.append([playbook.playbook, playbook.cache_dir(self.cachedir)] +
+                         [playbook.extra_vars.get(k, None) for k in column_order])
 
         # prepend the 'playbook' column
         column_order = ["playbook", "cache_dir"] + column_order
 
         print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
-    @staticmethod
-    def run_hash(playbook, tags, extra_vars):
-        m = hashlib.md5()
-        m.update(playbook)
-        if tags:
-            m.update(",".join(tags))
-        m.update(str(recursive_hash(extra_vars)))
-        return m.hexdigest()
-
-    def run_dir(self, playbook, inventory, tags, extra_vars):
-        return os.path.join(self.cachedir, self.run_hash(playbook, tags, extra_vars))
-
 
     def run_playbooks(self):
-        for tup in self.binder():
-            playbook, inventory, tags, extra_vars = tup
-
-
-            if inventory is None:
-                inventory = Inventory(['localhost'])
-
-            p = Playbook(inventory, extra_vars=extra_vars, tags=tags)
-
+        for playbook in self.binder():
             if self.DEBUG:
-                p.logger.setLevel(logging.DEBUG)
+                playbook.logger.setLevel(logging.DEBUG)
 
             logger.info("Running %s" % playbook); t0 = time.time()
 
-            if not playbook.startswith("/"):
-                playbook = os.path.join(self.binder_dir, playbook)
+            # handle relative directories in binders
+            if not playbook.playbook.startswith("/"):
+                playbook.playbook = os.path.join(self.binder_dir, playbook.playbook)
 
-            ret = p.run(playbook)
+            ret = playbook.run()
 
-            logger.info("Finished %s (%s)" % (playbook, time.time() - t0))
+            logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
 
             if ret != 0:
-                logger.error("Error running %s" % playbook)
+                logger.error("Error running %s" % playbook.playbook)
                 sys.exit(ret)
 
 def main():

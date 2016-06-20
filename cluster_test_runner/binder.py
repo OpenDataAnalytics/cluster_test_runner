@@ -3,6 +3,10 @@ import yaml
 from collections import OrderedDict
 import logging
 import sys
+from dauber import Playbook, Inventory
+import os
+import hashlib
+from utils import recursive_hash
 
 logger = logging.getLogger('cluster_test_runner')
 
@@ -32,13 +36,39 @@ class BinderParamater(object):
         return {k: v[idx] for k, v in self.pegged_vars.items()}
 
 
-class BinderPlaybook(object):
+class YamlBinderPlaybook(object):
     def __init__(self, path, static_vars=None):
         self.path = path
         self.static_vars = static_vars
 
     def __repr__(self):
         return "%s<\"%s\">" % (self.__class__.__name__, self.path)
+
+
+class BinderPlaybook(Playbook):
+    def __init__(self, playbook, *args, **kwargs):
+        super(BinderPlaybook, self).__init__(*args, **kwargs)
+        self.playbook = playbook
+        if self.inventory is None:
+            self.inventory = Inventory(['localhost'])
+
+    def run(self):
+        return super(BinderPlaybook, self).run(self.playbook)
+
+    @property
+    def extra_vars(self):
+        return reduce(lambda a, b: a.update(b) or a, self._extra_vars, {})
+
+    def __hash__(self):
+        m = hashlib.md5()
+        m.update(self.playbook)
+        if self.tags:
+            m.update(self._tags_as_csv(None).next())
+        m.update(str(recursive_hash(self.extra_vars)))
+        return m.hexdigest()
+
+    def cache_dir(self, root):
+        return os.path.join(root, self.__hash__())
 
 
 class Binder(object):
@@ -65,9 +95,9 @@ class Binder(object):
         if hasattr(self, "_last_params"):
             for p, v in (set(self._last_params) - set(paramater_values)):
                 if self.global_paramaters[p].transitions is not None:
-                    for tup in self._merge_extra_vars(self.global_paramaters[p].transitions,
-                                                      self._last_params):
-                        yield tup
+                    for playbook in self._merge_extra_vars(self.global_paramaters[p].transitions,
+                                                           self._last_params):
+                        yield playbook
         else:
             # Create _last_params if it doesn't exist
             self._last_params = paramater_values
@@ -93,27 +123,30 @@ class Binder(object):
                 #       to allow for inner scopes to remove outter scope variables
                 # TODO: add a template engine step here to allow for composing variables based
                 #       on the values of other variables (i.e.  for creating custom app-id's)
-                # TODO: add inventory where None is if exists
-                # TODO: add tags where second None is if exists
 
-                yield playbook.path, None, None, extra_vars
+                # TODO: add inventory if it exists
+                # TODO: add tags if it exists
+                # TODO: add env if it exists
+
+                yield BinderPlaybook(playbook.path, inventory=None,
+                                     env=None, tags=None, extra_vars=extra_vars)
 
 
     def __call__(self):
         for paramater_list in itertools.product(
                 *[param() for param in self.global_paramaters.values()]):
 
-            for tup in self.check_transitions(paramater_list):
-                yield tup
+            for playbook in self.check_transitions(paramater_list):
+                yield playbook
 
-            for tup in self._merge_extra_vars(self.playbooks, paramater_list):
-                yield tup
+            for playbook in self._merge_extra_vars(self.playbooks, paramater_list):
+                yield playbook
 
             self._last_params = paramater_list
 
         # Run final set of transitions
-        for tup in self.check_transitions((p, None) for p, v in paramater_list):
-            yield tup
+        for playbook in self.check_transitions((p, None) for p, v in paramater_list):
+            yield playbook
 
         # Clean up last params
         del self._last_params
@@ -142,7 +175,6 @@ def parse_binder(input_binder_path):
 
 
 
-
 def _binder_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
     return Binder(n['playbooks'], n.get('vars', None), n['paramaters'])
@@ -150,7 +182,7 @@ def _binder_constructor(loader, node):
 
 def _binderplaybook_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return BinderPlaybook(n['path'], n.get('vars', None))
+    return YamlBinderPlaybook(n['path'], n.get('vars', None))
 
 
 def _binderparamater_constructor(loader, node):
