@@ -1,5 +1,7 @@
 import itertools
 import yaml
+from collections import OrderedDict
+
 
 class BinderParamater(object):
     def __init__(self, name, values, cost=1, transitions=None):
@@ -14,6 +16,7 @@ class BinderParamater(object):
     def __call__(self):
         for v in self.values:
             yield (self.name, v)
+
 
 class BinderPlaybook(object):
     def __init__(self, path, static_vars):
@@ -32,9 +35,11 @@ class Binder(object):
         assert len(paramaters) == len(set(p.name for p in paramaters)), \
             "Paramater names must be unique!"
 
-        self.global_paramaters = paramaters
+        self.global_paramaters = OrderedDict(
+            [(p.name, p) for p in sorted(paramaters, key=lambda p: p.cost,
+                                         reverse=True)])
 
-        # TODO: transform yaml dict into tuple of tuples
+        # TODO: parse excludes from the YAML file
         self.exclude = []
 
     def __repr__(self):
@@ -42,22 +47,57 @@ class Binder(object):
                 (self.__class__.__name__, len(self.playbooks),
                  len(self.global_paramaters)))
 
+    def check_transitions(self, paramater_values):
+        if hasattr(self, "_last_params"):
+            for p, v in (set(self._last_params) ^ set(paramater_values)):
+                if self.global_paramaters[p].transitions is not None:
+                    for playbook, inventory, extra_vars in \
+                        self._merge_extra_vars(self.global_paramaters[p].transitions,
+                                               self._last_params):
+                        yield playbook, inventory, extra_vars
+        else:
+            # Create _last_params if it doesn't exist
+            self._last_params = paramater_values
+
+
+    def _merge_extra_vars(self, playbooks, paramater_list):
+        if tuple(paramater_list) not in self.exclude:
+            for playbook in playbooks:
+                extra_vars = {}
+
+                extra_vars.update(self.global_static_vars)
+
+                extra_vars.update(playbook.static_vars)
+
+                extra_vars.update(dict(paramater_list))
+                # TODO: remove any variables that have a special value (e.g. 'omit')
+                #       to allow for inner scopes to remove outter scope variables
+                # TODO: add a template engine step here to allow for composing variables based
+                #       on the values of other variables (i.e.  for creating custom app-id's)
+                # TODO: add inventory where None is if exists
+
+                yield playbook.path, None, extra_vars
+
+
     def __call__(self):
         for paramater_list in itertools.product(
-                *[p() for p in sorted(self.global_paramaters,
-                                      key=lambda p: p.cost, reverse=True)]):
+                *[p() for p in self.global_paramaters.values()]):
 
-            if tuple(paramater_list) not in self.exclude:
-                for playbook in self.playbooks:
-                    extra_vars = {}
+            for p, i, ev in self.check_transitions(paramater_list):
+                yield p, i, ev
 
-                    extra_vars.update(self.global_static_vars)
+            for p, i, ev in self._merge_extra_vars(self.playbooks, paramater_list):
+                yield p, i, ev
 
-                    extra_vars.update(playbook.static_vars)
+            self._last_params = paramater_list
 
-                    extra_vars.update(dict(paramater_list))
-                    # TODO: add inventory where None is
-                    yield playbook.path, None, extra_vars
+        # Run final set of transitions
+        for p, i, ev in self.check_transitions((p, None) for p, v in paramater_list):
+            yield p, i, ev
+
+        # Clean up last params
+        del self._last_params
+
 
 def _binder_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)

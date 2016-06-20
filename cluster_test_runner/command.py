@@ -52,19 +52,18 @@ def dry_run_playbook(binder_path, show_static=False, tabstyle='simple'):
     # and get a list of names. We want to make sure the column order
     # will be playbook,  *paramaters,  *static_vars and that paramaters
     # will be sorted based on descending cost
-    column_order = [p.name for p in
-                    sorted(get_binder(binder_path).global_paramaters,
-                           key=lambda p: p.cost, reverse=True)]
+    binder = get_binder(binder_path)
+    column_order = binder.global_paramaters.keys()
 
     # get all playbooks/inventory/extra_vars as a list
-    playbooks = list(parse_binder(binder_path))
+    playbooks = list(binder())
 
     # Get a set of all of the variables (e.g. paramatesrs + static variables)
     # and subtract the paramater list,  then append it to the column order.
     # This makes sure the static variables are at the end of list of columns
     if show_static:
-        column_order += list(set([k for p,i,e in playbooks for k in e.keys()])
-                             - set(column_order))
+        column_order += list(set([k for p, i, e in playbooks
+                                  for k in e.keys()]) - set(column_order))
 
     # Generate table rows. Cycle through column_order variable and get
     # extra_vars value for that key (or None). Keep in mind there may be
@@ -131,8 +130,7 @@ def main():
         '--tabstyle', dest="tabstyle", action="store", default="simple",
         help="Style to print the table in, see: https://pypi.python.org/pypi/tabulate",
         choices=["plain", "simple", "grid", "fancy_grid", "pip", "orgtbl", "rst", "mediawiki",
-             "html", "latex", "latex_booktabs"])
-
+                 "html", "latex", "latex_booktabs"])
 
     parser.add_argument(
         "input_binder", help="path to a playbook to run")
