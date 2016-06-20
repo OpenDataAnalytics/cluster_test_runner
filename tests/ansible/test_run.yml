@@ -6,3 +6,5 @@
         sleep {{ test_run_option }}
       async: 45
       poll: 0
+
+#    - debug: msg="{{ foo }}"

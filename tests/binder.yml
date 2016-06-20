@@ -1,7 +1,7 @@
 - !binder
   vars:
-    ansible_python_interpreter: python2
-
+    some_global_var: some_global_var
+    ansible_python_interpreter: /home/kotfic/.venvs/cluster_test_runner/bin/python2
   playbooks:
     - !playbook
       path: "ansible/test.yml"

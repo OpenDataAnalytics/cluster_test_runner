@@ -1,12 +1,12 @@
 from dauber import Playbook, Inventory
-import yaml
 import argparse
 import logging
 import time
 import sys
 import os
 from tabulate import tabulate
-from binder import Binder # noqa
+from binder import get_binder, parse_binder  # noqa
+from utils import recursive_hash
 
 DEBUG = False
 
@@ -24,27 +24,6 @@ def excepthook(exctype, value, traceback):
     sys.exit(1)
 
 sys.excepthook = excepthook
-
-def get_binder(input_binder_path):
-    try:
-        with open(input_binder_path, "rb") as fh:
-            binder_list = yaml.load(fh.read())
-
-        if len(binder_list) > 1:
-            logger.warn("More than one binder detected. Dropping all but first binder.")
-
-        return binder_list[0]
-
-    except IOError:
-        logger.error("Could not read %s" % input_binder_path)
-        sys.exit(1)
-    except yaml.scanner.ScannerError:
-        logger.error("Could not parse %s" % input_binder_path)
-        sys.exit(1)
-
-
-def parse_binder(input_binder_path):
-    return get_binder(input_binder_path)()
 
 
 def dry_run_playbook(binder_path, show_static=False, tabstyle='simple'):
@@ -69,13 +48,16 @@ def dry_run_playbook(binder_path, show_static=False, tabstyle='simple'):
     # extra_vars value for that key (or None). Keep in mind there may be
     # playbook specific variables so it is possible for some playbooks
     # that we will get None for the key.
-    table = [[playbook] + [extra_vars.get(k, None) for k in column_order]
+    table = [[playbook, run_hash(playbook, extra_vars)] + [extra_vars.get(k, None) for k in column_order]
              for playbook, inventory, extra_vars in playbooks]
 
     # prepend the 'playbook' column
-    column_order = ["playbook"] + column_order
+    column_order = ["playbook", "hash"] + column_order
 
     print tabulate(table, headers=column_order, tablefmt=tabstyle)
+
+def run_hash(playbook, extra_vars):
+    return hash(str(hash(playbook)) + str(recursive_hash(extra_vars)))
 
 
 def run_playbooks(binder_path):

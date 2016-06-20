@@ -1,7 +1,10 @@
 import itertools
 import yaml
 from collections import OrderedDict
+import logging
+import sys
 
+logger = logging.getLogger('cluster_test_runner')
 
 class BinderParamater(object):
     def __init__(self, name, values, cost=1, transitions=None):
@@ -99,6 +102,30 @@ class Binder(object):
 
         # Clean up last params
         del self._last_params
+
+
+def get_binder(input_binder_path):
+    try:
+        with open(input_binder_path, "rb") as fh:
+            binder_list = yaml.load(fh.read())
+
+        if len(binder_list) > 1:
+            logger.warn("More than one binder detected. Dropping all but first binder.")
+
+        return binder_list[0]
+
+    except IOError:
+        logger.error("Could not read %s" % input_binder_path)
+        sys.exit(1)
+    except yaml.scanner.ScannerError:
+        logger.error("Could not parse %s" % input_binder_path)
+        sys.exit(1)
+
+
+def parse_binder(input_binder_path):
+    return get_binder(input_binder_path)()
+
+
 
 
 def _binder_constructor(loader, node):
