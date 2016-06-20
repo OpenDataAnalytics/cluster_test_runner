@@ -65,10 +65,9 @@ class Binder(object):
         if hasattr(self, "_last_params"):
             for p, v in (set(self._last_params) - set(paramater_values)):
                 if self.global_paramaters[p].transitions is not None:
-                    for playbook, inventory, extra_vars in \
-                        self._merge_extra_vars(self.global_paramaters[p].transitions,
-                                               self._last_params):
-                        yield playbook, inventory, extra_vars
+                    for tup in self._merge_extra_vars(self.global_paramaters[p].transitions,
+                                                      self._last_params):
+                        yield tup
         else:
             # Create _last_params if it doesn't exist
             self._last_params = paramater_values
@@ -95,25 +94,26 @@ class Binder(object):
                 # TODO: add a template engine step here to allow for composing variables based
                 #       on the values of other variables (i.e.  for creating custom app-id's)
                 # TODO: add inventory where None is if exists
+                # TODO: add tags where second None is if exists
 
-                yield playbook.path, None, extra_vars
+                yield playbook.path, None, None, extra_vars
 
 
     def __call__(self):
         for paramater_list in itertools.product(
                 *[param() for param in self.global_paramaters.values()]):
 
-            for p, i, ev in self.check_transitions(paramater_list):
-                yield p, i, ev
+            for tup in self.check_transitions(paramater_list):
+                yield tup
 
-            for p, i, ev in self._merge_extra_vars(self.playbooks, paramater_list):
-                yield p, i, ev
+            for tup in self._merge_extra_vars(self.playbooks, paramater_list):
+                yield tup
 
             self._last_params = paramater_list
 
         # Run final set of transitions
-        for p, i, ev in self.check_transitions((p, None) for p, v in paramater_list):
-            yield p, i, ev
+        for tup in self.check_transitions((p, None) for p, v in paramater_list):
+            yield tup
 
         # Clean up last params
         del self._last_params

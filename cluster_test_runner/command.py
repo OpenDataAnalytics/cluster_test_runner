@@ -48,16 +48,18 @@ class TestRunner(object):
         # and subtract the paramater list,  then append it to the column order.
         # This makes sure the static variables are at the end of list of columns
         if show_static:
-            column_order += list(set([k for p, i, e in playbooks
+            column_order += list(set([k for p, i, t, e in playbooks
                                       for k in e.keys()]) - set(column_order))
 
         # Generate table rows. Cycle through column_order variable and get
         # extra_vars value for that key (or None). Keep in mind there may be
         # playbook specific variables so it is possible for some playbooks
         # that we will get None for the key.
-        table = [[playbook, os.path.join(self.cachedir, self.run_hash(playbook, extra_vars))] +
-                 [extra_vars.get(k, None) for k in column_order]
-                 for playbook, inventory, extra_vars in playbooks]
+        table = []
+        for tup in playbooks:
+            playbook, inventory, tags, extra_vars = tup
+            table.append([playbook, self.run_dir(*tup)] +
+                         [extra_vars.get(k, None) for k in column_order])
 
         # prepend the 'playbook' column
         column_order = ["playbook", "cache_dir"] + column_order
@@ -65,18 +67,27 @@ class TestRunner(object):
         print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
     @staticmethod
-    def run_hash(playbook, extra_vars):
+    def run_hash(playbook, tags, extra_vars):
         m = hashlib.md5()
         m.update(playbook)
+        if tags:
+            m.update(",".join(tags))
         m.update(str(recursive_hash(extra_vars)))
         return m.hexdigest()
 
+    def run_dir(self, playbook, inventory, tags, extra_vars):
+        return os.path.join(self.cachedir, self.run_hash(playbook, tags, extra_vars))
+
+
     def run_playbooks(self):
-        for playbook, inventory, extra_vars in self.binder():
+        for tup in self.binder():
+            playbook, inventory, tags, extra_vars = tup
+
+
             if inventory is None:
                 inventory = Inventory(['localhost'])
 
-            p = Playbook(inventory, extra_vars=extra_vars)
+            p = Playbook(inventory, extra_vars=extra_vars, tags=tags)
 
             if self.DEBUG:
                 p.logger.setLevel(logging.DEBUG)
