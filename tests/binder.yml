@@ -22,6 +22,8 @@
     - !paramater
       name: "num_instances"
       values: [4, 8, 16, 64]
+      vars:
+        provision_opt_3: ["60G", "124G", "252G", "1020G"]
       cost: 100
       transitions:
         - !playbook

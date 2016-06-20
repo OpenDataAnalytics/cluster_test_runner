@@ -7,11 +7,18 @@ import sys
 logger = logging.getLogger('cluster_test_runner')
 
 class BinderParamater(object):
-    def __init__(self, name, values, cost=1, transitions=None):
+    def __init__(self, name, values, pegged_vars=None, cost=1, transitions=None):
         self.name = name
         self.values = values
         self.cost = cost
         self.transitions = transitions
+
+        self.pegged_vars = pegged_vars if pegged_vars else {}
+
+        for k, values in self.pegged_vars.items():
+            assert len(self.values) == len(values), \
+                "Paramater vars must have the same length as paramater values."
+
 
     def __repr__(self):
         return "%s<\"%s\">" % (self.__class__.__name__, self.name)
@@ -19,6 +26,10 @@ class BinderParamater(object):
     def __call__(self):
         for v in self.values:
             yield (self.name, v)
+
+    def get_pegged_vars(self, param):
+        idx = self.values.index(param)
+        return {k: v[idx] for k, v in self.pegged_vars.items()}
 
 
 class BinderPlaybook(object):
@@ -74,7 +85,11 @@ class Binder(object):
                 if playbook.static_vars:
                     extra_vars.update(playbook.static_vars)
 
-                extra_vars.update(dict(paramater_list))
+                # Add paramaters and any pegged variables
+                for param, value in paramater_list:
+                    extra_vars[param] = value
+                    extra_vars.update(self.global_paramaters[param].get_pegged_vars(value))
+
                 # TODO: remove any variables that have a special value (e.g. 'omit')
                 #       to allow for inner scopes to remove outter scope variables
                 # TODO: add a template engine step here to allow for composing variables based
@@ -140,7 +155,7 @@ def _binderplaybook_constructor(loader, node):
 
 def _binderparamater_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return BinderParamater(n['name'], n['values'],
+    return BinderParamater(n['name'], n['values'], n.get('vars', None),
                            n.get('cost', 1), n.get("transitions", None))
 
 
