@@ -7,16 +7,14 @@ import os
 from tabulate import tabulate
 from binder import get_binder, parse_binder  # noqa
 from utils import recursive_hash
+import hashlib
 
-DEBUG = False
 
 logger = logging.getLogger('cluster_test_runner')
 
 
 def excepthook(exctype, value, traceback):
-    global DEBUG
-
-    if DEBUG:
+    if TestRunner.DEBUG:
         sys.__excepthook__(exctype, value, traceback)
     else:
         logger.error("%s: %s" % (value.__class__.__name__, str(value)))
@@ -26,67 +24,77 @@ def excepthook(exctype, value, traceback):
 sys.excepthook = excepthook
 
 
-def dry_run_playbook(binder_path, show_static=False, tabstyle='simple'):
-    # get the binder object,  sort paramaters based on cost,
-    # and get a list of names. We want to make sure the column order
-    # will be playbook,  *paramaters,  *static_vars and that paramaters
-    # will be sorted based on descending cost
-    binder = get_binder(binder_path)
-    column_order = binder.global_paramaters.keys()
+class TestRunner(object):
+    DEBUG = False
 
-    # get all playbooks/inventory/extra_vars as a list
-    playbooks = list(binder())
+    def __init__(self, args):
+        self.binder_path = args.input_binder
+        self.binder_dir = os.path.dirname(os.path.realpath(self.binder_path))
+        self.binder = get_binder(self.binder_path)
 
-    # Get a set of all of the variables (e.g. paramatesrs + static variables)
-    # and subtract the paramater list,  then append it to the column order.
-    # This makes sure the static variables are at the end of list of columns
-    if show_static:
-        column_order += list(set([k for p, i, e in playbooks
-                                  for k in e.keys()]) - set(column_order))
+        self.cachedir = args.cachedir
 
-    # Generate table rows. Cycle through column_order variable and get
-    # extra_vars value for that key (or None). Keep in mind there may be
-    # playbook specific variables so it is possible for some playbooks
-    # that we will get None for the key.
-    table = [[playbook, run_hash(playbook, extra_vars)] + [extra_vars.get(k, None) for k in column_order]
-             for playbook, inventory, extra_vars in playbooks]
+    def dry_run_playbook(self, show_static=False, tabstyle='simple'):
+        # get the binder object,  sort paramaters based on cost,
+        # and get a list of names. We want to make sure the column order
+        # will be playbook,  *paramaters,  *static_vars and that paramaters
+        # will be sorted based on descending cost
+        column_order = self.binder.global_paramaters.keys()
 
-    # prepend the 'playbook' column
-    column_order = ["playbook", "hash"] + column_order
+        # get all playbooks/inventory/extra_vars as a list
+        playbooks = list(self.binder())
 
-    print tabulate(table, headers=column_order, tablefmt=tabstyle)
+        # Get a set of all of the variables (e.g. paramatesrs + static variables)
+        # and subtract the paramater list,  then append it to the column order.
+        # This makes sure the static variables are at the end of list of columns
+        if show_static:
+            column_order += list(set([k for p, i, e in playbooks
+                                      for k in e.keys()]) - set(column_order))
 
-def run_hash(playbook, extra_vars):
-    return hash(str(hash(playbook)) + str(recursive_hash(extra_vars)))
+        # Generate table rows. Cycle through column_order variable and get
+        # extra_vars value for that key (or None). Keep in mind there may be
+        # playbook specific variables so it is possible for some playbooks
+        # that we will get None for the key.
+        table = [[playbook, os.path.join(self.cachedir, self.run_hash(playbook, extra_vars))] +
+                 [extra_vars.get(k, None) for k in column_order]
+                 for playbook, inventory, extra_vars in playbooks]
 
+        # prepend the 'playbook' column
+        column_order = ["playbook", "cache_dir"] + column_order
 
-def run_playbooks(binder_path):
-    binder_dir = os.path.dirname(os.path.realpath(binder_path))
+        print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
-    for playbook, inventory, extra_vars in parse_binder(binder_path):
-        if inventory is None:
-            inventory = Inventory(['localhost'])
+    @staticmethod
+    def run_hash(playbook, extra_vars):
+        m = hashlib.md5()
+        m.update(playbook)
+        m.update(str(recursive_hash(extra_vars)))
+        return m.hexdigest()
 
-        p = Playbook(inventory, extra_vars=extra_vars)
+    def run_playbooks(self):
+        for playbook, inventory, extra_vars in self.binder():
+            if inventory is None:
+                inventory = Inventory(['localhost'])
 
-        if DEBUG:
-            p.logger.setLevel(logging.DEBUG)
+            p = Playbook(inventory, extra_vars=extra_vars)
 
-        logger.info("Running %s" % playbook); t0 = time.time()
+            if self.DEBUG:
+                p.logger.setLevel(logging.DEBUG)
 
-        if not playbook.startswith("/"):
-            playbook = os.path.join(binder_dir, playbook)
+            logger.info("Running %s" % playbook); t0 = time.time()
 
-        ret = p.run(playbook)
+            if not playbook.startswith("/"):
+                playbook = os.path.join(self.binder_dir, playbook)
 
-        logger.info("Finished %s (%s)" % (playbook, time.time() - t0))
+            ret = p.run(playbook)
 
-        if ret != 0:
-            logger.error("Error running %s" % playbook)
-            sys.exit(ret)
+            logger.info("Finished %s (%s)" % (playbook, time.time() - t0))
+
+            if ret != 0:
+                logger.error("Error running %s" % playbook)
+                sys.exit(ret)
 
 def main():
-    global DEBUG
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -100,6 +108,11 @@ def main():
         '-d', '--debug',
         help="Print lots of debugging statements",
         action='store_true')
+
+    parser.add_argument(
+        '-c', '--cache-dir',
+        help="Directory to cache playbook output, status, etc",
+        action='store', default='.test_cache', dest="cachedir")
 
     parser.add_argument(
         '--dry-run', dest="dryrun",
@@ -124,17 +137,17 @@ def main():
     args = parser.parse_args()
 
     if args.debug or args.loglevel == "DEBUG":
-        DEBUG = True
+        TestRunner.DEBUG = True
 
     logger.setLevel(getattr(logging, args.loglevel))
 
+    tr = TestRunner(args)
     if args.dryrun:
-        dry_run_playbook(args.input_binder,
-                         show_static=args.showallvars,
-                         tabstyle=args.tabstyle)
+        tr.dry_run_playbook(show_static=args.showallvars,
+                            tabstyle=args.tabstyle)
         sys.exit(0)
 
-    run_playbooks(args.input_binder)
+    tr.run_playbooks()
 
 if __name__ == "__main__":
     main()

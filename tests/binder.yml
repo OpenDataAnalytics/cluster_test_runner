@@ -1,7 +1,4 @@
 - !binder
-  vars:
-    some_global_var: some_global_var
-    ansible_python_interpreter: /home/kotfic/.venvs/cluster_test_runner/bin/python2
   playbooks:
     - !playbook
       path: "ansible/test.yml"
@@ -34,3 +31,7 @@
     - !paramater
       name: test_run_option
       values: [5, 10, 15]
+
+  vars:
+    some_global_var: some_global_var
+    ansible_python_interpreter: /usr/bin/python2
