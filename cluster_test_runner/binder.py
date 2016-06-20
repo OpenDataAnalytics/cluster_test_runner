@@ -19,7 +19,7 @@ class BinderParamater(object):
 
 
 class BinderPlaybook(object):
-    def __init__(self, path, static_vars):
+    def __init__(self, path, static_vars=None):
         self.path = path
         self.static_vars = static_vars
 
@@ -49,7 +49,7 @@ class Binder(object):
 
     def check_transitions(self, paramater_values):
         if hasattr(self, "_last_params"):
-            for p, v in (set(self._last_params) ^ set(paramater_values)):
+            for p, v in (set(self._last_params) - set(paramater_values)):
                 if self.global_paramaters[p].transitions is not None:
                     for playbook, inventory, extra_vars in \
                         self._merge_extra_vars(self.global_paramaters[p].transitions,
@@ -65,9 +65,11 @@ class Binder(object):
             for playbook in playbooks:
                 extra_vars = {}
 
-                extra_vars.update(self.global_static_vars)
+                if self.global_static_vars:
+                    extra_vars.update(self.global_static_vars)
 
-                extra_vars.update(playbook.static_vars)
+                if playbook.static_vars:
+                    extra_vars.update(playbook.static_vars)
 
                 extra_vars.update(dict(paramater_list))
                 # TODO: remove any variables that have a special value (e.g. 'omit')
@@ -81,7 +83,7 @@ class Binder(object):
 
     def __call__(self):
         for paramater_list in itertools.product(
-                *[p() for p in self.global_paramaters.values()]):
+                *[param() for param in self.global_paramaters.values()]):
 
             for p, i, ev in self.check_transitions(paramater_list):
                 yield p, i, ev
@@ -101,17 +103,19 @@ class Binder(object):
 
 def _binder_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return Binder(n['playbooks'], n['vars'], n['paramaters'])
+    return Binder(n['playbooks'], n.get('vars', None), n['paramaters'])
 
 
 def _binderplaybook_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return BinderPlaybook(n['path'], n['vars'])
+    return BinderPlaybook(n['path'], n.get('vars', None))
 
 
 def _binderparamater_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return BinderParamater(n['name'], n['values'], n.get('cost', 1), n.get("transitions", None))
+    return BinderParamater(n['name'], n['values'],
+                           n.get('cost', 1), n.get("transitions", None))
+
 
 yaml.add_constructor(u'!binder', _binder_constructor)
 yaml.add_constructor(u'!playbook', _binderplaybook_constructor)

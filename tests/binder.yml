@@ -25,7 +25,7 @@
       cost: 100
       transitions:
         - !playbook
-          path: "ansible/cleanup.yml"
+          path: "ansible/cleanup_num_instances.yml"
           vars:
             state: absent
 

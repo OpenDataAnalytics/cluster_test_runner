@@ -95,9 +95,13 @@ def run_playbooks(binder_path):
         if not playbook.startswith("/"):
             playbook = os.path.join(binder_dir, playbook)
 
-        p.run(playbook)
+        ret = p.run(playbook)
 
         logger.info("Finished %s (%s)" % (playbook, time.time() - t0))
+
+        if ret != 0:
+            logger.error("Error running %s" % playbook)
+            sys.exit(ret)
 
 def main():
     global DEBUG
