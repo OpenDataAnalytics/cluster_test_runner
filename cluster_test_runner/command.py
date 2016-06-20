@@ -42,11 +42,12 @@ def get_binder(input_binder_path):
         logger.error("Could not parse %s" % input_binder_path)
         sys.exit(1)
 
+
 def parse_binder(input_binder_path):
     return get_binder(input_binder_path)()
 
 
-def dry_run_playbook(binder_path, show_static=False):
+def dry_run_playbook(binder_path, show_static=False, tabstyle='simple'):
     # get the binder object,  sort paramaters based on cost,
     # and get a list of names. We want to make sure the column order
     # will be playbook,  *paramaters,  *static_vars and that paramaters
@@ -75,7 +76,8 @@ def dry_run_playbook(binder_path, show_static=False):
     # prepend the 'playbook' column
     column_order = ["playbook"] + column_order
 
-    print tabulate(table, headers=column_order)
+    print tabulate(table, headers=column_order, tablefmt=tabstyle)
+
 
 def run_playbooks(binder_path):
     binder_dir = os.path.dirname(os.path.realpath(binder_path))
@@ -126,6 +128,13 @@ def main():
         action='store_true')
 
     parser.add_argument(
+        '--tabstyle', dest="tabstyle", action="store", default="simple",
+        help="Style to print the table in, see: https://pypi.python.org/pypi/tabulate",
+        choices=["plain", "simple", "grid", "fancy_grid", "pip", "orgtbl", "rst", "mediawiki",
+             "html", "latex", "latex_booktabs"])
+
+
+    parser.add_argument(
         "input_binder", help="path to a playbook to run")
 
     args = parser.parse_args()
@@ -136,7 +145,9 @@ def main():
     logger.setLevel(getattr(logging, args.loglevel))
 
     if args.dryrun:
-        dry_run_playbook(args.input_binder, show_static=args.showallvars)
+        dry_run_playbook(args.input_binder,
+                         show_static=args.showallvars,
+                         tabstyle=args.tabstyle)
         sys.exit(0)
 
     run_playbooks(args.input_binder)
