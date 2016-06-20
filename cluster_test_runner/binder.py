@@ -2,10 +2,11 @@ import itertools
 import yaml
 
 class BinderParamater(object):
-    def __init__(self, name, values, cost=1):
+    def __init__(self, name, values, cost=1, transitions=None):
         self.name = name
         self.values = values
         self.cost = cost
+        self.transitions = transitions
 
     def __repr__(self):
         return "%s<\"%s\">" % (self.__class__.__name__, self.name)
@@ -70,7 +71,7 @@ def _binderplaybook_constructor(loader, node):
 
 def _binderparamater_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return BinderParamater(n['name'], n['values'], n.get('cost', 1))
+    return BinderParamater(n['name'], n['values'], n.get('cost', 1), n.get("transitions", None))
 
 yaml.add_constructor(u'!binder', _binder_constructor)
 yaml.add_constructor(u'!playbook', _binderplaybook_constructor)

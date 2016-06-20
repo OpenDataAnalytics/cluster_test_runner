@@ -23,6 +23,11 @@
       name: "num_instances"
       values: [4, 8, 16, 64]
       cost: 100
+      transitions:
+        - !playbook
+          path: "ansible/test.yml"
+          vars:
+            state: absent
 
     - !paramater
       name: test_run_option

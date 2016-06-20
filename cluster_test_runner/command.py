@@ -1,11 +1,12 @@
 from dauber import Playbook, Inventory
-from binder import Binder
 import yaml
 import argparse
 import logging
 import time
 import sys
 import os
+from tabulate import tabulate
+from binder import Binder # noqa
 
 DEBUG = False
 
@@ -24,7 +25,7 @@ def excepthook(exctype, value, traceback):
 
 sys.excepthook = excepthook
 
-def parse_binder(input_binder_path):
+def get_binder(input_binder_path):
     try:
         with open(input_binder_path, "rb") as fh:
             binder_list = yaml.load(fh.read())
@@ -32,7 +33,7 @@ def parse_binder(input_binder_path):
         if len(binder_list) > 1:
             logger.warn("More than one binder detected. Dropping all but first binder.")
 
-        return binder_list[0]()
+        return binder_list[0]
 
     except IOError:
         logger.error("Could not read %s" % input_binder_path)
@@ -41,6 +42,40 @@ def parse_binder(input_binder_path):
         logger.error("Could not parse %s" % input_binder_path)
         sys.exit(1)
 
+def parse_binder(input_binder_path):
+    return get_binder(input_binder_path)()
+
+
+def dry_run_playbook(binder_path, show_static=False):
+    # get the binder object,  sort paramaters based on cost,
+    # and get a list of names. We want to make sure the column order
+    # will be playbook,  *paramaters,  *static_vars and that paramaters
+    # will be sorted based on descending cost
+    column_order = [p.name for p in
+                    sorted(get_binder(binder_path).global_paramaters,
+                           key=lambda p: p.cost, reverse=True)]
+
+    # get all playbooks/inventory/extra_vars as a list
+    playbooks = list(parse_binder(binder_path))
+
+    # Get a set of all of the variables (e.g. paramatesrs + static variables)
+    # and subtract the paramater list,  then append it to the column order.
+    # This makes sure the static variables are at the end of list of columns
+    if show_static:
+        column_order += list(set([k for p,i,e in playbooks for k in e.keys()])
+                             - set(column_order))
+
+    # Generate table rows. Cycle through column_order variable and get
+    # extra_vars value for that key (or None). Keep in mind there may be
+    # playbook specific variables so it is possible for some playbooks
+    # that we will get None for the key.
+    table = [[playbook] + [extra_vars.get(k, None) for k in column_order]
+             for playbook, inventory, extra_vars in playbooks]
+
+    # prepend the 'playbook' column
+    column_order = ["playbook"] + column_order
+
+    print tabulate(table, headers=column_order)
 
 def run_playbooks(binder_path):
     binder_dir = os.path.dirname(os.path.realpath(binder_path))
@@ -80,6 +115,17 @@ def main():
         action='store_true')
 
     parser.add_argument(
+        '--dry-run', dest="dryrun",
+        help="Display what would be run, including paramaters",
+        action='store_true')
+
+    parser.add_argument(
+        '--show-all-vars', dest="showallvars",
+        help="Also print static variables that will be set on"
+        " playbook run when --dry-run is used",
+        action='store_true')
+
+    parser.add_argument(
         "input_binder", help="path to a playbook to run")
 
     args = parser.parse_args()
@@ -88,6 +134,10 @@ def main():
         DEBUG = True
 
     logger.setLevel(getattr(logging, args.loglevel))
+
+    if args.dryrun:
+        dry_run_playbook(args.input_binder, show_static=args.showallvars)
+        sys.exit(0)
 
     run_playbooks(args.input_binder)
 
