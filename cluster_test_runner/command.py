@@ -109,10 +109,14 @@ def status(showallvars, tabstyle, binder_path):
 
 
 def setup_playbook_logging(playbook):
+    # Make the playbook cache directory
     playbook.mkcache_dir()
 
+    # Set the log level
     playbook.logger.setLevel(logger.level)
     playbook.logger.handlers = []
+
+    # Set the console logger (click)
     playbook.logger.addHandler(get_click_handler(
         ERROR=dict(fg='red'),
         EXCEPTION=dict(fg='red'),
@@ -124,7 +128,14 @@ def setup_playbook_logging(playbook):
         playbook.cache_dir(),
         os.path.splitext(os.path.basename(playbook.playbook))[0]))
 
-    playbook.logger.addHandler(logging.FileHandler(logfile_path, mode='wb'))
+    logger.debug("Logging playbook output to: {}".format(logfile_path))
+
+    # Set up a file based logger (will save to cache dir)
+    fh = logging.FileHandler(logfile_path, mode='wb')
+    formatter = logging.Formatter('%(asctime)s - %(name)-15s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+
+    playbook.logger.addHandler(fh)
 
 
 
@@ -141,16 +152,20 @@ def run(binder_path):
 
         setup_playbook_logging(playbook)
 
-        logger.info("Running %s" % playbook.playbook); t0 = time.time()
-
-        ret = playbook.run()
-
-        logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
+        if playbook.get_status() != "COMPLETE":
+            logger.info("Running %s" % playbook.playbook); t0 = time.time()
+            ret = playbook.run()
+            logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
+        else:
+            logger.info("Skipping %s" % playbook.playbook); t0 = time.time()
+            ret = 0
 
         if ret != 0:
             logger.error("Error running %s" % playbook.playbook)
             sys.exit(ret)
 
+    # Exit with return code of last playbook
+    sys.exit(ret)
 
 @main.command()
 def clean():

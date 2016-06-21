@@ -98,7 +98,7 @@ class BinderPlaybook(Playbook):
             os.makedirs(self.cache_dir())
         except OSError:
             pass
-
+        self.logger.debug("Created {}".format(self.cache_dir()))
 
     def set_status(self, status):
         assert status in PLAY_STATUS, \
