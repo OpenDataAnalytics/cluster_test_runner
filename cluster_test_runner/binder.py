@@ -10,6 +10,8 @@ from utils import recursive_hash
 
 logger = logging.getLogger('cluster_test_runner')
 
+PLAY_STATUS = ["RUNNING", "COMPLETE", "ERROR"]
+
 class BinderParamater(object):
     def __init__(self, name, values, pegged_vars=None, cost=1, transitions=None):
         self.name = name
@@ -46,20 +48,35 @@ class YamlBinderPlaybook(object):
 
 
 class BinderPlaybook(Playbook):
+    root_cache_dir = ".test_cache"
+    root_playbook_dir = ""
+
     def __init__(self, playbook, *args, **kwargs):
         super(BinderPlaybook, self).__init__(*args, **kwargs)
-        self.playbook = playbook
+
+        self.playbook = playbook if playbook.startswith("/") else \
+            os.path.join(self.root_playbook_dir, playbook)
+
         if self.inventory is None:
             self.inventory = Inventory(['localhost'])
 
     def run(self):
-        return super(BinderPlaybook, self).run(self.playbook)
+        self.set_status("RUNNING")
+
+        code = super(BinderPlaybook, self).run(self.playbook)
+
+        if code == 0:
+            self.set_status("COMPLETE")
+        else:
+            self.set_status("ERROR")
+
+        return code
 
     @property
     def extra_vars(self):
         return reduce(lambda a, b: a.update(b) or a, self._extra_vars, {})
 
-    def __hash__(self):
+    def get_hash(self):
         m = hashlib.md5()
         m.update(self.playbook)
         if self.tags:
@@ -67,8 +84,34 @@ class BinderPlaybook(Playbook):
         m.update(str(recursive_hash(self.extra_vars)))
         return m.hexdigest()
 
-    def cache_dir(self, root):
-        return os.path.join(root, self.__hash__())
+    def cache_dir(self):
+        return os.path.join(self.root_cache_dir, self.get_hash())
+
+    def get_status(self):
+        for status in PLAY_STATUS:
+            if os.path.exists(os.path.join(self.cache_dir(), status)):
+                return status
+        return None
+
+    def set_status(self, status):
+        assert status in PLAY_STATUS, \
+            "status must be one of %s" % ", ".join(PLAY_STATUS)
+
+        try:
+            os.makedirs(self.cache_dir())
+        except OSError:
+            pass
+
+        for _status in PLAY_STATUS:
+            try:
+                os.remove(os.path.join(self.cache_dir(), _status))
+            except OSError:
+                pass
+
+        with open(os.path.join(self.cache_dir(), status), "wb") as fh:
+            fh.write(status + "\n")
+
+        return status
 
 
 class Binder(object):

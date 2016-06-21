@@ -6,6 +6,7 @@ import sys
 import os
 from tabulate import tabulate
 from binder import get_binder, parse_binder  # noqa
+from binder import BinderPlaybook
 from utils import recursive_hash
 import hashlib
 
@@ -32,8 +33,6 @@ class TestRunner(object):
         self.binder_dir = os.path.dirname(os.path.realpath(self.binder_path))
         self.binder = get_binder(self.binder_path)
 
-        self.cachedir = args.cachedir
-
     def dry_run_playbook(self, show_static=False, tabstyle='simple'):
         # get the binder object,  sort paramaters based on cost,
         # and get a list of names. We want to make sure the column order
@@ -59,11 +58,14 @@ class TestRunner(object):
         # that we will get None for the key.
         table = []
         for playbook in playbooks:
-            table.append([playbook.playbook, playbook.cache_dir(self.cachedir)] +
+
+            table.append([os.path.basename(playbook.playbook),
+                          playbook.cache_dir(),
+                          playbook.get_status()] +
                          [playbook.extra_vars.get(k, None) for k in column_order])
 
         # prepend the 'playbook' column
-        column_order = ["playbook", "cache_dir"] + column_order
+        column_order = ["playbook", "cache_dir", "status"] + column_order
 
         print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
@@ -74,10 +76,6 @@ class TestRunner(object):
                 playbook.logger.setLevel(logging.DEBUG)
 
             logger.info("Running %s" % playbook); t0 = time.time()
-
-            # handle relative directories in binders
-            if not playbook.playbook.startswith("/"):
-                playbook.playbook = os.path.join(self.binder_dir, playbook.playbook)
 
             ret = playbook.run()
 
@@ -120,9 +118,17 @@ def main():
 
     parser.add_argument(
         '--tabstyle', dest="tabstyle", action="store", default="simple",
-        help="Style to print the table in, see: https://pypi.python.org/pypi/tabulate",
-        choices=["plain", "simple", "grid", "fancy_grid", "pip", "orgtbl", "rst", "mediawiki",
+        help="Style to print the table in, "
+        "see: https://pypi.python.org/pypi/tabulate",
+        choices=["plain", "simple", "grid", "fancy_grid",
+                 "pip", "orgtbl", "rst", "mediawiki",
                  "html", "latex", "latex_booktabs"])
+
+    parser.add_argument(
+        '-p', '--playbook-root', dest="playbook_root_dir",
+        help="Root directory for playbooks with relative paths, "
+        "defaults to location of input_binder",
+        action="store", default="")
 
     parser.add_argument(
         "input_binder", help="path to a playbook to run")
@@ -131,6 +137,13 @@ def main():
 
     if args.debug or args.loglevel == "DEBUG":
         TestRunner.DEBUG = True
+
+    BinderPlaybook.root_cache_dir = args.cachedir
+
+    if args.playbook_root_dir == "":
+        BinderPlaybook.root_playbook_dir = os.path.dirname(os.path.realpath(args.input_binder))
+    else:
+        BinderPlaybook.root_playbook_dir = args.input_binder
 
     logger.setLevel(getattr(logging, args.loglevel))
 
