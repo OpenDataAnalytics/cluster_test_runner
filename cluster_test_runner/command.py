@@ -13,9 +13,10 @@ import hashlib
 
 logger = logging.getLogger('cluster_test_runner')
 
+DEBUG = False
 
 def excepthook(exctype, value, traceback):
-    if TestRunner.DEBUG:
+    if DEBUG:
         sys.__excepthook__(exctype, value, traceback)
     else:
         logger.error("%s: %s" % (value.__class__.__name__, str(value)))
@@ -25,68 +26,62 @@ def excepthook(exctype, value, traceback):
 sys.excepthook = excepthook
 
 
-class TestRunner(object):
-    DEBUG = False
+def status_playbooks(args):
+    binder = get_binder(args.input_binder)
+    # get the binder object,  sort paramaters based on cost,
+    # and get a list of names. We want to make sure the column order
+    # will be playbook,  *paramaters,  *static_vars and that paramaters
+    # will be sorted based on descending cost
+    column_order = binder.global_paramaters.keys()
 
-    def __init__(self, args):
-        self.binder_path = args.input_binder
-        self.binder_dir = os.path.dirname(os.path.realpath(self.binder_path))
-        self.binder = get_binder(self.binder_path)
+    # get all playbooks/inventory/extra_vars as a list
+    playbooks = list(binder())
 
-    def dry_run_playbook(self, show_static=False, tabstyle='simple'):
-        # get the binder object,  sort paramaters based on cost,
-        # and get a list of names. We want to make sure the column order
-        # will be playbook,  *paramaters,  *static_vars and that paramaters
-        # will be sorted based on descending cost
-        column_order = self.binder.global_paramaters.keys()
+    # Get a set of all of the variables (e.g. paramatesrs + static variables)
+    # and subtract the paramater list,  then append it to the column order.
+    # This makes sure the static variables are at the end of list of columns
+    if args.showallvars:
 
-        # get all playbooks/inventory/extra_vars as a list
-        playbooks = list(self.binder())
+        column_order += list(set([k for p in playbooks
+                                  for k in p.extra_vars.keys()]) -
+                             set(column_order))
 
-        # Get a set of all of the variables (e.g. paramatesrs + static variables)
-        # and subtract the paramater list,  then append it to the column order.
-        # This makes sure the static variables are at the end of list of columns
-        if show_static:
+    # Generate table rows. Cycle through column_order variable and get
+    # extra_vars value for that key (or None). Keep in mind there may be
+    # playbook specific variables so it is possible for some playbooks
+    # that we will get None for the key.
+    table = []
+    for playbook in playbooks:
 
-            column_order += list(set([k for p in playbooks
-                                      for k in p.extra_vars.keys()]) -
-                                 set(column_order))
+        table.append([os.path.basename(playbook.playbook),
+                      playbook.cache_dir(),
+                      playbook.get_status()] +
+                     [playbook.extra_vars.get(k, None) for k in column_order])
 
-        # Generate table rows. Cycle through column_order variable and get
-        # extra_vars value for that key (or None). Keep in mind there may be
-        # playbook specific variables so it is possible for some playbooks
-        # that we will get None for the key.
-        table = []
-        for playbook in playbooks:
+    # prepend the 'playbook' column
+    column_order = ["playbook", "cache_dir", "status"] + column_order
 
-            table.append([os.path.basename(playbook.playbook),
-                          playbook.cache_dir(),
-                          playbook.get_status()] +
-                         [playbook.extra_vars.get(k, None) for k in column_order])
-
-        # prepend the 'playbook' column
-        column_order = ["playbook", "cache_dir", "status"] + column_order
-
-        print tabulate(table, headers=column_order, tablefmt=tabstyle)
+    print tabulate(table, headers=column_order, tablefmt=args.tabstyle)
 
 
-    def run_playbooks(self):
-        for playbook in self.binder():
-            if self.DEBUG:
-                playbook.logger.setLevel(logging.DEBUG)
+def run_playbooks(args):
+    binder = get_binder(args.input_binder)
 
-            logger.info("Running %s" % playbook); t0 = time.time()
+    for playbook in binder():
+        if DEBUG:
+            playbook.logger.setLevel(logging.DEBUG)
 
-            ret = playbook.run()
+        logger.info("Running %s" % playbook.playbook); t0 = time.time()
 
-            logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
+        ret = playbook.run()
 
-            if ret != 0:
-                logger.error("Error running %s" % playbook.playbook)
-                sys.exit(ret)
+        logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
+
+        if ret != 0:
+            logger.error("Error running %s" % playbook.playbook)
+            sys.exit(ret)
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-l', '--log-level',
@@ -106,17 +101,22 @@ def main():
         action='store', default='.test_cache', dest="cachedir")
 
     parser.add_argument(
-        '--dry-run', dest="dryrun",
-        help="Display what would be run, including paramaters",
-        action='store_true')
+        '-p', '--playbook-root', dest="playbook_root_dir",
+        help="Root directory for playbooks with relative paths, "
+        "defaults to location of input_binder",
+        action="store", default="")
 
-    parser.add_argument(
+    subparsers = parser.add_subparsers(help="sub-command help")
+    status = subparsers.add_parser("status", help="Get the status of the test suite")
+    status.set_defaults(func=status_playbooks)
+
+    status.add_argument(
         '--show-all-vars', dest="showallvars",
         help="Also print static variables that will be set on"
         " playbook run when --dry-run is used",
         action='store_true')
 
-    parser.add_argument(
+    status.add_argument(
         '--tabstyle', dest="tabstyle", action="store", default="simple",
         help="Style to print the table in, "
         "see: https://pypi.python.org/pypi/tabulate",
@@ -124,19 +124,20 @@ def main():
                  "pip", "orgtbl", "rst", "mediawiki",
                  "html", "latex", "latex_booktabs"])
 
-    parser.add_argument(
-        '-p', '--playbook-root', dest="playbook_root_dir",
-        help="Root directory for playbooks with relative paths, "
-        "defaults to location of input_binder",
-        action="store", default="")
-
-    parser.add_argument(
+    status.add_argument(
         "input_binder", help="path to a playbook to run")
+
+
+    run = subparsers.add_parser("run", help="Run the test suite")
+    run.set_defaults(func=run_playbooks)
+    run.add_argument(
+        "input_binder", help="path to a playbook to run")
+
 
     args = parser.parse_args()
 
     if args.debug or args.loglevel == "DEBUG":
-        TestRunner.DEBUG = True
+        DEBUG = True
 
     BinderPlaybook.root_cache_dir = args.cachedir
 
@@ -147,13 +148,14 @@ def main():
 
     logger.setLevel(getattr(logging, args.loglevel))
 
-    tr = TestRunner(args)
-    if args.dryrun:
-        tr.dry_run_playbook(show_static=args.showallvars,
-                            tabstyle=args.tabstyle)
-        sys.exit(0)
+    return args.func(args)
 
-    tr.run_playbooks()
+#    if args.status:
+#        tr.dry_run_playbook(show_static=args.showallvars,
+#                            tabstyle=args.tabstyle)
+#        sys.exit(0)
+#    elif args.run:
+#        tr.run_playbooks()
 
 if __name__ == "__main__":
     main()
