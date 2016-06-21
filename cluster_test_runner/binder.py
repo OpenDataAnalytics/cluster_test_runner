@@ -93,14 +93,18 @@ class BinderPlaybook(Playbook):
                 return status
         return None
 
-    def set_status(self, status):
-        assert status in PLAY_STATUS, \
-            "status must be one of %s" % ", ".join(PLAY_STATUS)
-
+    def mkcache_dir(self):
         try:
             os.makedirs(self.cache_dir())
         except OSError:
             pass
+
+
+    def set_status(self, status):
+        assert status in PLAY_STATUS, \
+            "status must be one of %s" % ", ".join(PLAY_STATUS)
+
+        self.mkcache_dir()
 
         for _status in PLAY_STATUS:
             try:

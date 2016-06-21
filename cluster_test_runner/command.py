@@ -7,12 +7,12 @@ import os
 from tabulate import tabulate
 from binder import get_binder, parse_binder  # noqa
 from binder import BinderPlaybook
-from utils import recursive_hash
+from utils import recursive_hash, get_click_handler
 import hashlib
 import click
 import shutil
 
-logger = logging.getLogger('cluster_test_runner')
+logger = logging.getLogger('TestRunner')
 
 # Controls whether we show raw python exceptions
 DEBUG = False
@@ -108,6 +108,25 @@ def status(showallvars, tabstyle, binder_path):
     print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
 
+def setup_playbook_logging(playbook):
+    playbook.mkcache_dir()
+
+    playbook.logger.setLevel(logger.level)
+    playbook.logger.handlers = []
+    playbook.logger.addHandler(get_click_handler(
+        ERROR=dict(fg='red'),
+        EXCEPTION=dict(fg='red'),
+        CRITICAL=dict(fg='red'),
+        DEBUG=dict(fg='blue'),
+        WARNING=dict(fg='yellow'),
+        INFO=dict(fg='blue')))
+    logfile_path = "{}.log".format(os.path.join(
+        playbook.cache_dir(),
+        os.path.splitext(os.path.basename(playbook.playbook))[0]))
+
+    playbook.logger.addHandler(logging.FileHandler(logfile_path, mode='wb'))
+
+
 
 @main.command()
 @click.option("--playbook-root", "-p",
@@ -119,8 +138,8 @@ def run(binder_path):
     binder = get_binder(binder_path)
 
     for playbook in binder():
-        if DEBUG:
-            playbook.logger.setLevel(logging.DEBUG)
+
+        setup_playbook_logging(playbook)
 
         logger.info("Running %s" % playbook.playbook); t0 = time.time()
 
