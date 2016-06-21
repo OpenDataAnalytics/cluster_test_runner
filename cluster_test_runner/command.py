@@ -9,13 +9,15 @@ from binder import get_binder, parse_binder  # noqa
 from binder import BinderPlaybook
 from utils import recursive_hash
 import hashlib
-
+import click
+import shutil
 
 logger = logging.getLogger('cluster_test_runner')
 
+# Controls whether we show raw python exceptions
 DEBUG = False
 
-def excepthook(exctype, value, traceback):
+def _excepthook(exctype, value, traceback):
     if DEBUG:
         sys.__excepthook__(exctype, value, traceback)
     else:
@@ -23,11 +25,53 @@ def excepthook(exctype, value, traceback):
 
     sys.exit(1)
 
-sys.excepthook = excepthook
+sys.excepthook = _excepthook
 
 
-def status_playbooks(args):
-    binder = get_binder(args.input_binder)
+def _playbook_root_callback(ctx, param, value):
+    if value is not None:
+        BinderPlaybook.root_playbook_dir = value
+    if 'binder_path' in ctx.params:
+        BinderPlaybook.root_playbook_dir = os.path.dirname(os.path.realpath(ctx.params['binder_path']))
+
+
+
+@click.group()
+@click.option("--debug", "-d", is_flag=True, default=False,
+              help="Print logs of debugging statements")
+
+@click.option("--loglevel", "-l", default="INFO",
+              type=click.Choice(["INFO", "WARN", "ERROR", "DEBUG"]),
+              help="Set the log level")
+@click.option("--cachedir", "-c", default=".test_cache",
+              help="")
+def main(debug, loglevel, cachedir):
+    global DEBUG
+    logger.setLevel(getattr(logging, loglevel))
+
+    if debug or loglevel == "DEBUG":
+        DEBUG = True
+        logger.setLevel(logging.DEBUG)
+
+    BinderPlaybook.root_cache_dir = cachedir
+
+
+
+@main.command()
+@click.option("--showallvars", "-s", is_flag=True, default=False,
+              help="Also print static variables that will be set on run")
+@click.option("--tabstyle", "-t", default="simple",
+              type=click.Choice(["plain", "simple", "grid", "fancy_grid",
+                                 "pip", "orgtbl", "rst", "mediawiki",
+                                 "html", "latex", "latex_booktabs"]),
+              help="Style to print table. See:https://pypi.python.org/pypi/tabulate")
+@click.option("--playbook-root", "-p",
+              callback=_playbook_root_callback, expose_value=False,
+              help="Root directory for playbooks with relative paths, "
+              "defaults to location of input_binder")
+@click.argument('binder_path', type=click.Path(exists=True))
+def status(showallvars, tabstyle, binder_path):
+    binder = get_binder(binder_path)
     # get the binder object,  sort paramaters based on cost,
     # and get a list of names. We want to make sure the column order
     # will be playbook,  *paramaters,  *static_vars and that paramaters
@@ -40,7 +84,7 @@ def status_playbooks(args):
     # Get a set of all of the variables (e.g. paramatesrs + static variables)
     # and subtract the paramater list,  then append it to the column order.
     # This makes sure the static variables are at the end of list of columns
-    if args.showallvars:
+    if showallvars:
 
         column_order += list(set([k for p in playbooks
                                   for k in p.extra_vars.keys()]) -
@@ -61,11 +105,18 @@ def status_playbooks(args):
     # prepend the 'playbook' column
     column_order = ["playbook", "cache_dir", "status"] + column_order
 
-    print tabulate(table, headers=column_order, tablefmt=args.tabstyle)
+    print tabulate(table, headers=column_order, tablefmt=tabstyle)
 
 
-def run_playbooks(args):
-    binder = get_binder(args.input_binder)
+
+@main.command()
+@click.option("--playbook-root", "-p",
+              callback=_playbook_root_callback, expose_value=False,
+              help="Root directory for playbooks with relative paths, "
+              "defaults to location of input_binder")
+@click.argument('binder_path', type=click.Path(exists=True))
+def run(binder_path):
+    binder = get_binder(binder_path)
 
     for playbook in binder():
         if DEBUG:
@@ -81,81 +132,15 @@ def run_playbooks(args):
             logger.error("Error running %s" % playbook.playbook)
             sys.exit(ret)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-l', '--log-level',
-        help="Print lots of debugging statements (implies -d)",
-        action="store", dest="loglevel", default="INFO",
-        choices=["INFO", "WARN", "ERROR", "DEBUG"]
 
-    )
-    parser.add_argument(
-        '-d', '--debug',
-        help="Print lots of debugging statements",
-        action='store_true')
-
-    parser.add_argument(
-        '-c', '--cache-dir',
-        help="Directory to cache playbook output, status, etc",
-        action='store', default='.test_cache', dest="cachedir")
-
-    parser.add_argument(
-        '-p', '--playbook-root', dest="playbook_root_dir",
-        help="Root directory for playbooks with relative paths, "
-        "defaults to location of input_binder",
-        action="store", default="")
-
-    subparsers = parser.add_subparsers(help="sub-command help")
-    status = subparsers.add_parser("status", help="Get the status of the test suite")
-    status.set_defaults(func=status_playbooks)
-
-    status.add_argument(
-        '--show-all-vars', dest="showallvars",
-        help="Also print static variables that will be set on"
-        " playbook run when --dry-run is used",
-        action='store_true')
-
-    status.add_argument(
-        '--tabstyle', dest="tabstyle", action="store", default="simple",
-        help="Style to print the table in, "
-        "see: https://pypi.python.org/pypi/tabulate",
-        choices=["plain", "simple", "grid", "fancy_grid",
-                 "pip", "orgtbl", "rst", "mediawiki",
-                 "html", "latex", "latex_booktabs"])
-
-    status.add_argument(
-        "input_binder", help="path to a playbook to run")
+@main.command()
+def clean():
+    try:
+        shutil.rmtree(BinderPlaybook.root_cache_dir + "/")
+    except OSError as e:
+        logger.debug(str(e))
 
 
-    run = subparsers.add_parser("run", help="Run the test suite")
-    run.set_defaults(func=run_playbooks)
-    run.add_argument(
-        "input_binder", help="path to a playbook to run")
-
-
-    args = parser.parse_args()
-
-    if args.debug or args.loglevel == "DEBUG":
-        DEBUG = True
-
-    BinderPlaybook.root_cache_dir = args.cachedir
-
-    if args.playbook_root_dir == "":
-        BinderPlaybook.root_playbook_dir = os.path.dirname(os.path.realpath(args.input_binder))
-    else:
-        BinderPlaybook.root_playbook_dir = args.input_binder
-
-    logger.setLevel(getattr(logging, args.loglevel))
-
-    return args.func(args)
-
-#    if args.status:
-#        tr.dry_run_playbook(show_static=args.showallvars,
-#                            tabstyle=args.tabstyle)
-#        sys.exit(0)
-#    elif args.run:
-#        tr.run_playbooks()
 
 if __name__ == "__main__":
     main()
