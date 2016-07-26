@@ -113,17 +113,13 @@ def setup_playbook_logging(playbook):
     playbook.mkcache_dir()
 
     # Set the log level
-    playbook.logger.setLevel(logger.level)
+    playbook.logger.setLevel(logging.DEBUG)
     playbook.logger.handlers = []
 
     # Set the console logger (click)
-    playbook.logger.addHandler(get_click_handler(
-        ERROR=dict(fg='red'),
-        EXCEPTION=dict(fg='red'),
-        CRITICAL=dict(fg='red'),
-        DEBUG=dict(fg='blue'),
-        WARNING=dict(fg='yellow'),
-        INFO=dict(fg='blue')))
+    ch = get_click_handler(INFO=dict(fg='blue'), DEBUG=dict(fg='blue'))
+    ch.setLevel(logger.level)
+    playbook.logger.addHandler(ch)
     logfile_path = "{}.log".format(os.path.join(
         playbook.cache_dir(),
         os.path.splitext(os.path.basename(playbook.playbook))[0]))
@@ -134,7 +130,8 @@ def setup_playbook_logging(playbook):
     fh = logging.FileHandler(logfile_path, mode='wb')
     formatter = logging.Formatter('%(asctime)s - %(name)-15s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
-
+    # Cache logs always set to DEBUG
+    fh.setLevel(logging.DEBUG)
     playbook.logger.addHandler(fh)
 
 
@@ -153,8 +150,10 @@ def run(binder_path):
         setup_playbook_logging(playbook)
 
         if playbook.get_status() != "COMPLETE":
-            logger.info("Running %s" % playbook.playbook); t0 = time.time()
+            t0 = time.time()
+
             ret = playbook.run()
+
             logger.info("Finished %s (%s)" % (playbook.playbook, time.time() - t0))
         else:
             logger.info("Skipping %s" % playbook.playbook); t0 = time.time()

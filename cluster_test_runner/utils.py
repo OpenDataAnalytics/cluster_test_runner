@@ -37,7 +37,7 @@ class ColorFormatter(logging.Formatter):
         'INFO': dict(fg='green', bold=True)
     }
     def __init__(self, *args, **kwargs):
-        self.colors = ColorFormatter._colors.copy()
+        self.colors = self._colors.copy()
         self.colors.update(kwargs.get("colors", {}))
         try:
             del kwargs['colors']
@@ -49,7 +49,8 @@ class ColorFormatter(logging.Formatter):
 
     def format(self, record):
         if not record.exc_info:
-            record.levelname = click.style(record.levelname, **self.colors[record.levelname])
+            record.levelname = click.style(record.levelname,
+                                           **self.colors[record.levelname])
         return logging.Formatter.format(self, record)
 
 

@@ -6,6 +6,7 @@ import sys
 from dauber import Playbook, Inventory
 import os
 import hashlib
+from jinja2 import Template
 from utils import recursive_hash
 
 logger = logging.getLogger('cluster_test_runner')
@@ -52,9 +53,9 @@ class BinderPlaybook(Playbook):
     root_playbook_dir = ""
 
     def __init__(self, playbook, *args, **kwargs):
-        super(BinderPlaybook, self).__init__(*args, **kwargs)
+        super(BinderPlaybook, self).__init__(playbook, *args, **kwargs)
 
-        self.playbook = playbook if playbook.startswith("/") else \
+        self.playbook = self.playbook if playbook.startswith("/") else \
             os.path.join(self.root_playbook_dir, playbook)
 
         if self.inventory is None:
@@ -63,7 +64,7 @@ class BinderPlaybook(Playbook):
     def run(self):
         self.set_status("RUNNING")
 
-        code = super(BinderPlaybook, self).run(self.playbook)
+        code = super(BinderPlaybook, self).run()
 
         if code == 0:
             self.set_status("COMPLETE")
@@ -165,6 +166,7 @@ class Binder(object):
                 for param, value in paramater_list:
                     extra_vars[param] = value
                     extra_vars.update(self.global_paramaters[param].get_pegged_vars(value))
+
 
                 # TODO: remove any variables that have a special value (e.g. 'omit')
                 #       to allow for inner scopes to remove outter scope variables

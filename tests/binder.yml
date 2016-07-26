@@ -35,3 +35,4 @@
   vars:
     some_global_var: some_global_var
     ansible_python_interpreter: /usr/bin/python2
+#    app_id: "app-{{ num_instace}}_{{provision_opt_2 }}_{{ test_run_option }}"
