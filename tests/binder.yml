@@ -1,4 +1,9 @@
 - !binder
+  pre:
+    - !playbook
+      path: ansible/pre_playbook.yml
+      vars:
+        some_var: "some_var_value"
   playbooks:
     - !playbook
       path: "ansible/test.yml"

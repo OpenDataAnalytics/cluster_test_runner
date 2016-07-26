@@ -120,9 +120,11 @@ class BinderPlaybook(Playbook):
 
 
 class Binder(object):
-    def __init__(self, playbooks, global_static_vars, paramaters):
+    def __init__(self, playbooks, global_static_vars, paramaters, pre, post):
         self.playbooks = playbooks
         self.global_static_vars = global_static_vars
+        self.pre = pre
+        self.post = post
 
         assert len(paramaters) == len(set(p.name for p in paramaters)), \
             "Paramater names must be unique!"
@@ -226,7 +228,8 @@ def parse_binder(input_binder_path):
 
 def _binder_constructor(loader, node):
     n = loader.construct_mapping(node, deep=True)
-    return Binder(n['playbooks'], n.get('vars', None), n['paramaters'])
+    return Binder(n['playbooks'], n.get('vars', None),
+                  n['paramaters'], n.get("pre", None), n.get("post", None))
 
 
 def _binderplaybook_constructor(loader, node):

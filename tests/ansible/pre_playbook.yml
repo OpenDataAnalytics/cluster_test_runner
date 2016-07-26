@@ -1,0 +1,5 @@
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: A task run from a playbook that is run before all playbooks
+      debug: msg="Pre plabyook where some_var is {{ some_var }} and some_global_var is {{ some_global_var }}"
